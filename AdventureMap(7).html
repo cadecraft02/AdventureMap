@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Road Trip Planner</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root {
+    --dust-grey: #dad7cd;
+    --dry-sage: #a3b18a;
+    --fern: #588157;
+    --hunter-green: #3a5a40;
+    --pine-teal: #344e41;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100vh; overflow:hidden; font-family:'Segoe UI',Arial,sans-serif; background:var(--pine-teal); }
+
+  #sidebar {
+    position:fixed; top:0; left:0; width:290px; height:100vh;
+    background:var(--pine-teal); color:var(--dust-grey); z-index:1000;
+    display:flex; flex-direction:column; box-shadow:3px 0 16px rgba(0,0,0,0.5);
+  }
+  #sidebar-header { background:var(--hunter-green); padding:14px 16px 10px; border-bottom:2px solid var(--fern); flex-shrink:0; }
+  #sidebar-header h1 { font-size:.92rem; font-weight:700; color:var(--dust-grey); letter-spacing:.05em; text-transform:uppercase; }
+  #sidebar-header p { font-size:.67rem; color:var(--dry-sage); margin-top:2px; }
+
+  #quick-stats {
+    padding:10px 14px; background:var(--hunter-green); border-bottom:1px solid var(--fern);
+    display:flex; justify-content:space-between; gap:8px; flex-shrink:0;
+  }
+  .stat-box { flex:1; text-align:center; }
+  .stat-val { font-size:.95rem; font-weight:700; color:var(--dry-sage); }
+  .stat-lbl { font-size:.58rem; color:rgba(218,215,205,0.6); text-transform:uppercase; letter-spacing:.06em; margin-top:2px; }
+
+  #search-bar {
+    padding:8px 14px; background:var(--hunter-green); border-bottom:1px solid var(--fern); flex-shrink:0;
+    display:flex; gap:6px; align-items:center;
+  }
+  #search-input {
+    flex:1; background:var(--pine-teal); border:1px solid var(--fern); border-radius:4px;
+    padding:6px 9px; font-size:.72rem; color:var(--dust-grey); outline:none;
+  }
+  #search-input:focus { border-color:var(--dry-sage); }
+  #sort-select {
+    background:var(--pine-teal); border:1px solid var(--fern); border-radius:4px;
+    padding:6px 7px; font-size:.68rem; color:var(--dust-grey); outline:none; cursor:pointer;
+  }
+
+  #route-box { background:var(--hunter-green); border-bottom:1px solid var(--fern); padding:12px 14px; flex-shrink:0; }
+  #route-box h2 { font-size:.65rem; color:var(--dry-sage); text-transform:uppercase; letter-spacing:.1em; margin-bottom:9px; }
+  .route-select-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .route-label { font-size:.62rem; color:rgba(218,215,205,0.6); width:32px; flex-shrink:0; text-align:right; }
+  .route-slot {
+    flex:1; background:var(--pine-teal); border:1px solid var(--fern); border-radius:4px;
+    padding:6px 9px; font-size:.72rem; color:rgba(218,215,205,0.7); cursor:pointer; transition:border-color .15s;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-height:30px; display:flex; align-items:center;
+  }
+  .route-slot.selecting { border-color:var(--dry-sage); color:var(--dry-sage); background:rgba(163,177,138,0.1); }
+  .route-slot.filled { border-color:var(--dry-sage); color:var(--dust-grey); }
+  .route-btns { display:flex; gap:6px; margin-top:6px; }
+  #swap-btn {
+    background:none; border:1px solid var(--fern); color:var(--dry-sage); border-radius:4px;
+    padding:5px 10px; font-size:.68rem; cursor:pointer; flex-shrink:0; transition:all .15s;
+  }
+  #swap-btn:hover { border-color:var(--dry-sage); color:var(--dust-grey); }
+  #calc-btn {
+    flex:1; background:var(--dry-sage); color:var(--pine-teal); border:none; border-radius:4px;
+    padding:6px; font-size:.72rem; font-weight:700; cursor:pointer; transition:background .15s;
+  }
+  #calc-btn:hover { background:var(--fern); }
+  #calc-btn:disabled { background:rgba(88,129,87,0.3); color:rgba(218,215,205,0.4); cursor:default; }
+  #route-result { margin-top:9px; background:var(--pine-teal); border:1px solid var(--fern); border-radius:4px; padding:8px 10px; display:none; }
+  #route-result.visible { display:block; }
+  .result-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:3px; }
+  .result-label { font-size:.62rem; color:rgba(218,215,205,0.6); text-transform:uppercase; letter-spacing:.06em; }
+  .result-val { font-size:.85rem; color:var(--dry-sage); font-weight:700; }
+  .result-note { font-size:.6rem; color:rgba(218,215,205,0.5); margin-top:5px; line-height:1.4; }
+
+  #tabs { display:flex; background:var(--hunter-green); border-bottom:1px solid var(--fern); flex-shrink:0; }
+  .tab { flex:1; padding:8px 0; text-align:center; font-size:.68rem; color:rgba(218,215,205,0.6); cursor:pointer; border-bottom:2px solid transparent; transition:all .15s; }
+  .tab.active { color:var(--dust-grey); border-bottom-color:var(--dry-sage); }
+  .tab:hover { color:var(--dust-grey); }
+
+  #stop-list { flex:1; overflow-y:auto; padding:4px 0; }
+  #stop-list::-webkit-scrollbar { width:3px; }
+  #stop-list::-webkit-scrollbar-thumb { background:var(--fern); border-radius:2px; }
+  .stop-item {
+    display:flex; align-items:flex-start; gap:9px; padding:9px 14px; border-bottom:1px solid rgba(88,129,87,0.3);
+    cursor:pointer; transition:background .15s; position:relative;
+  }
+  .stop-item:hover { background:rgba(88,129,87,0.2); }
+  .stop-item.active { background:rgba(163,177,138,0.15); border-left:3px solid var(--dry-sage); padding-left:11px; }
+  .stop-item.hidden { display:none; }
+  .stop-icon-box {
+    width:32px; height:32px; border-radius:8px; display:flex;
+    align-items:center; justify-content:center; font-size:1.1rem; flex-shrink:0; margin-top:1px;
+  }
+  .stop-info { flex:1; min-width:0; }
+  .stop-info h3 { font-size:.78rem; font-weight:700; color:var(--dust-grey); line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .stop-info p { font-size:.65rem; color:var(--dry-sage); margin-top:1px; }
+  .stop-ratings { margin-top:5px; display:flex; flex-direction:column; gap:3px; }
+  .rating-row { display:flex; align-items:center; gap:5px; }
+  .rating-lbl { font-size:.58rem; color:rgba(218,215,205,0.5); width:42px; flex-shrink:0; }
+  .rating-bar-track { flex:1; height:5px; background:rgba(88,129,87,0.3); border-radius:3px; overflow:hidden; cursor:pointer; }
+  .rating-bar-fill { height:100%; border-radius:3px; transition:width .2s; }
+  .rating-val { font-size:.6rem; font-weight:700; width:14px; text-align:right; flex-shrink:0; }
+  .notes-btn {
+    position:absolute; top:8px; right:8px;
+    background:none; border:1px solid var(--fern); color:var(--dry-sage); border-radius:4px;
+    padding:2px 6px; font-size:.65rem; cursor:pointer; transition:all .15s;
+  }
+  .notes-btn:hover { border-color:var(--dry-sage); color:var(--dust-grey); }
+  .notes-btn.has-notes { color:var(--dry-sage); border-color:var(--dry-sage); }
+
+  .edit-btn {
+    position:absolute; top:8px; right:38px;
+    background:none; border:1px solid var(--fern); color:var(--dry-sage); border-radius:4px;
+    padding:2px 6px; font-size:.65rem; cursor:pointer; transition:all .15s;
+  }
+  .edit-btn:hover { border-color:var(--dry-sage); color:var(--dust-grey); }
+
+  #action-btns {
+    padding:8px 14px; background:var(--hunter-green); border-top:1px solid var(--fern);
+    display:flex; gap:6px; flex-shrink:0;
+  }
+  .action-btn {
+    flex:1; background:var(--pine-teal); border:1px solid var(--fern); color:var(--dry-sage); border-radius:4px;
+    padding:6px; font-size:.68rem; cursor:pointer; text-align:center; transition:all .15s;
+  }
+  .action-btn:hover { border-color:var(--dry-sage); color:var(--dust-grey); }
+
+  #save-status {
+    padding:8px 14px; background:var(--hunter-green); border-top:1px solid var(--fern);
+    font-size:.65rem; color:var(--dry-sage); text-align:center; flex-shrink:0;
+  }
+
+  .modal-overlay {
+    position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:2000;
+    display:none; align-items:center; justify-content:center; backdrop-filter:blur(3px);
+  }
+  .modal-overlay.open { display:flex; }
+  .modal {
+    background:var(--hunter-green); border:1px solid var(--fern); border-radius:8px;
+    padding:20px; max-width:90vw; box-shadow:0 16px 48px rgba(0,0,0,0.7);
+  }
+  .modal h3 { font-size:.9rem; color:var(--dust-grey); font-weight:700; margin-bottom:14px; }
+  .modal-field { margin-bottom:11px; }
+  .modal-field label { display:block; font-size:.65rem; color:var(--dry-sage); margin-bottom:4px; text-transform:uppercase; letter-spacing:.06em; }
+  .modal-field input, .modal-field textarea {
+    width:100%; background:var(--pine-teal); border:1px solid var(--fern); border-radius:4px;
+    color:var(--dust-grey); font-size:.78rem; padding:7px 9px; outline:none; font-family:inherit; transition:border-color .15s;
+  }
+  .modal-field input:focus, .modal-field textarea:focus { border-color:var(--dry-sage); }
+  .modal-field textarea { resize:vertical; }
+  .modal-row { display:flex; gap:8px; }
+  .modal-row .modal-field { flex:1; }
+  .modal-btns { display:flex; gap:8px; margin-top:14px; }
+  .modal-btn-cancel { flex:1; background:none; border:1px solid var(--fern); color:var(--dry-sage); border-radius:4px; padding:8px; font-size:.75rem; cursor:pointer; }
+  .modal-btn-cancel:hover { border-color:var(--dry-sage); color:var(--dust-grey); }
+  .modal-btn-save {
+    flex:2; background:var(--dry-sage); color:var(--pine-teal); border:none; border-radius:4px;
+    padding:8px; font-size:.75rem; font-weight:700; cursor:pointer; transition:background .15s;
+  }
+  .modal-btn-save:hover { background:var(--fern); }
+  .modal-btn-delete {
+    background:none; border:1px solid #c62828; color:#ef5350; border-radius:4px;
+    padding:8px 12px; font-size:.75rem; cursor:pointer; transition:all .15s;
+  }
+  .modal-btn-delete:hover { background:#c62828; color:#fff; }
+  .emoji-grid { display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; }
+  .emoji-opt {
+    width:28px; height:28px; background:var(--pine-teal); border:1px solid var(--fern); border-radius:4px;
+    display:flex; align-items:center; justify-content:center; font-size:.9rem;
+    cursor:pointer; transition:all .15s;
+  }
+  .emoji-opt:hover, .emoji-opt.selected { border-color:var(--dry-sage); background:rgba(163,177,138,0.2); }
+  #modal-ai-status { font-size:.65rem; color:var(--dry-sage); margin-top:8px; text-align:center; min-height:16px; }
+  .big-rating-row { margin-bottom:14px; }
+  .big-rating-row label { font-size:.65rem; color:var(--dry-sage); text-transform:uppercase; letter-spacing:.06em; display:block; margin-bottom:6px; }
+  .star-row { display:flex; gap:4px; }
+  .star-btn {
+    font-size:1.3rem; cursor:pointer; opacity:.3; transition:opacity .1s, transform .1s;
+    background:none; border:none; padding:0; color:var(--dry-sage);
+  }
+  .star-btn.on { opacity:1; }
+  .star-btn:hover { transform:scale(1.2); }
+  #notes-textarea { min-height:200px; font-family:'Courier New',monospace; font-size:.75rem; line-height:1.6; }
+
+  #map { margin-left:290px; width:calc(100% - 290px); height:100vh; }
+  #instruction-bar {
+    position:fixed; top:14px; left:50%; transform:translateX(calc(-50% + 145px));
+    z-index:999; background:var(--hunter-green); color:var(--dry-sage);
+    font-size:.75rem; padding:6px 16px; border-radius:20px;
+    border:1px solid var(--dry-sage); display:none; pointer-events:none; backdrop-filter:blur(4px);
+  }
+  #instruction-bar.visible { display:block; }
+
+  #locate-btn {
+    position:fixed; bottom:24px; left:310px; z-index:999;
+    background:var(--dry-sage); color:var(--pine-teal); border:none; border-radius:50%;
+    width:48px; height:48px; font-size:1.3rem; cursor:pointer;
+    box-shadow:0 4px 16px rgba(0,0,0,0.4); transition:all .15s;
+  }
+  #locate-btn:hover { background:var(--fern); transform:scale(1.1); }
+
+  #gym-toggle {
+    position:fixed; bottom:80px; left:310px; z-index:999;
+    background:var(--pine-teal); color:var(--dry-sage); border:1px solid var(--fern); border-radius:24px;
+    padding:8px 14px; font-size:.7rem; cursor:pointer;
+    box-shadow:0 4px 16px rgba(0,0,0,0.4); transition:all .15s;
+  }
+  #gym-toggle:hover { border-color:var(--dry-sage); }
+  #gym-toggle.active { background:var(--dry-sage); color:var(--pine-teal); border-color:var(--dry-sage); }
+
+  .map-pin { display:flex; flex-direction:column; align-items:center; cursor:pointer; transition:transform .12s; }
+  .map-pin:hover { transform:scale(1.18) translateY(-3px); }
+  .pin-bubble {
+    width:38px; height:38px; border-radius:50%; display:flex; align-items:center;
+    justify-content:center; font-size:1.2rem; border:2.5px solid rgba(218,215,205,0.9);
+    box-shadow:0 3px 10px rgba(0,0,0,0.45); position:relative;
+  }
+  .pin-ring { position:absolute; inset:-5px; border-radius:50%; border:3px solid transparent; pointer-events:none; }
+  .pin-tail { width:2px; height:8px; border-radius:0 0 2px 2px; }
+
+  .location-pin {
+    width:20px; height:20px; border-radius:50%;
+    background:#2196f3; border:3px solid #fff;
+    box-shadow:0 0 0 4px rgba(33,150,243,0.3), 0 3px 10px rgba(0,0,0,0.4);
+    animation:pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow:0 0 0 4px rgba(33,150,243,0.3), 0 3px 10px rgba(0,0,0,0.4); }
+    50% { box-shadow:0 0 0 8px rgba(33,150,243,0.1), 0 3px 10px rgba(0,0,0,0.4); }
+  }
+
+  .gym-marker {
+    width:14px; height:14px; border-radius:50%;
+    background:#8e24aa; border:2px solid #fff;
+    box-shadow:0 2px 6px rgba(0,0,0,0.4);
+    font-size:.65rem; display:flex; align-items:center; justify-content:center;
+  }
+
+  .leaflet-popup-content-wrapper {
+    border-radius:6px; box-shadow:0 6px 24px rgba(0,0,0,0.4);
+    padding:0; overflow:hidden; min-width:220px; max-width:260px;
+  }
+  .leaflet-popup-content { margin:0 !important; }
+  .pu-head { padding:10px 13px; color:#fff; font-weight:700; font-size:.88rem; display:flex; align-items:center; gap:9px; }
+  .pu-head .pu-emoji { font-size:1.3rem; }
+  .pu-sub { font-size:.68rem; font-weight:400; opacity:.8; }
+  .pu-body { padding:8px 13px 11px; font-size:.76rem; color:#333; line-height:1.45; background:#fff; }
+  .pu-body .note { margin-top:5px; font-size:.68rem; color:#888; font-style:italic; }
+  .pu-ratings { margin-top:8px; padding-top:8px; border-top:1px solid #eee; }
+  .pu-rating-row { display:flex; align-items:center; gap:6px; margin-bottom:4px; font-size:.68rem; color:#666; }
+  .pu-stars { letter-spacing:.05em; }
+  .pu-rate-btn {
+    display:block; width:100%; margin-top:8px; background:var(--dry-sage); color:var(--pine-teal);
+    border:none; border-radius:4px; padding:5px; font-size:.68rem; font-weight:700;
+    cursor:pointer; text-align:center;
+  }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div id="sidebar-header">
+    <h1>🗺 Road Trip Planner</h1>
+    <p>Memphis → West & Back</p>
+  </div>
+
+  <div id="quick-stats">
+    <div class="stat-box"><div class="stat-val" id="stat-total">0</div><div class="stat-lbl">Stops</div></div>
+    <div class="stat-box"><div class="stat-val" id="stat-visited">0</div><div class="stat-lbl">Visited</div></div>
+  </div>
+
+  <div id="search-bar">
+    <input type="text" id="search-input" placeholder="🔍 Search..." />
+    <select id="sort-select">
+      <option value="default">Default</option>
+      <option value="alpha">A → Z</option>
+      <option value="interest-high">Want: High</option>
+      <option value="interest-low">Want: Low</option>
+      <option value="visited-high">Visit: High</option>
+      <option value="visited-low">Visit: Low</option>
+    </select>
+  </div>
+
+  <div id="route-box">
+    <h2>⏱ Drive Time</h2>
+    <div class="route-select-row">
+      <span class="route-label">FROM</span>
+      <div class="route-slot" id="slot-from" onclick="startSelect('from')">— tap —</div>
+    </div>
+    <div class="route-select-row">
+      <span class="route-label">TO</span>
+      <div class="route-slot" id="slot-to" onclick="startSelect('to')">— tap —</div>
+    </div>
+    <div class="route-btns">
+      <button id="swap-btn" onclick="swapStops()">⇅</button>
+      <button id="calc-btn" onclick="calcRoute()" disabled>Calculate</button>
+    </div>
+    <div id="route-result">
+      <div class="result-row"><span class="result-label">Distance</span><span class="result-val" id="res-dist">—</span></div>
+      <div class="result-row"><span class="result-label">Time</span><span class="result-val" id="res-time">—</span></div>
+      <div class="result-note" id="res-note"></div>
+    </div>
+  </div>
+
+  <div id="tabs">
+    <div class="tab active" data-tab="all">All</div>
+    <div class="tab" data-tab="visited">Visited</div>
+    <div class="tab" data-tab="unvisited">Unvisited</div>
+  </div>
+
+  <div id="stop-list"></div>
+
+  <div id="action-btns">
+    <div class="action-btn" onclick="openAddModal()">+ Add</div>
+    <div class="action-btn" onclick="exportData()">💾 Save</div>
+    <div class="action-btn" onclick="importData()">📂 Load</div>
+  </div>
+  <div id="save-status">Auto-save</div>
+</div>
+
+<div id="instruction-bar">Click a stop</div>
+<button id="locate-btn" onclick="getMyLocation()">📍</button>
+<div id="gym-toggle" onclick="toggleGyms()">🏋️ Gyms</div>
+
+<div id="map"></div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="add-modal">
+  <div class="modal" style="width:380px;">
+    <h3 id="modal-title">📍 Add Location</h3>
+    <div class="modal-field">
+      <label>Google Maps Link</label>
+      <input type="text" id="m-gmaps" placeholder="https://maps.google.com/..." />
+    </div>
+    <div class="modal-field">
+      <label>Name</label>
+      <input type="text" id="m-name" placeholder="e.g. Badlands NP" />
+    </div>
+    <div class="modal-row">
+      <div class="modal-field">
+        <label>Region</label>
+        <input type="text" id="m-sub" placeholder="State" />
+      </div>
+      <div class="modal-field">
+        <label>Want (1–10)</label>
+        <input type="number" id="m-interest" min="1" max="10" placeholder="8" />
+      </div>
+    </div>
+    <div class="modal-row">
+      <div class="modal-field">
+        <label>Latitude</label>
+        <input type="number" id="m-lat" step="any" />
+      </div>
+      <div class="modal-field">
+        <label>Longitude</label>
+        <input type="number" id="m-lng" step="any" />
+      </div>
+    </div>
+    <div class="modal-field">
+      <label>Icon</label>
+      <div class="emoji-grid" id="emoji-grid"></div>
+    </div>
+    <div class="modal-field">
+      <label>Description</label>
+      <textarea id="m-desc" style="min-height:60px;"></textarea>
+    </div>
+    <div id="modal-ai-status"></div>
+    <div class="modal-btns">
+      <button class="modal-btn-cancel" onclick="closeAddModal()">Cancel</button>
+      <button class="modal-btn-delete" id="modal-delete-btn" style="display:none;" onclick="deleteLocation()">Delete</button>
+      <button class="modal-btn-save" onclick="saveLocation()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="rating-modal">
+  <div class="modal" style="width:300px;">
+    <h3 id="rating-modal-title">Rate</h3>
+    <div style="font-size:.65rem;color:var(--dry-sage);margin-bottom:14px;" id="rating-modal-sub"></div>
+    <div class="big-rating-row">
+      <label>Want to Visit</label>
+      <div class="star-row" id="stars-interest"></div>
+    </div>
+    <div class="big-rating-row">
+      <label>After Visit</label>
+      <div class="star-row" id="stars-visited"></div>
+    </div>
+    <button class="modal-btn-save" style="width:100%;" onclick="saveRating()">Save</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="notes-modal">
+  <div class="modal" style="width:500px;max-width:90vw;">
+    <h3 id="notes-modal-title">📝 Notes</h3>
+    <div style="font-size:.68rem;color:var(--dry-sage);margin-bottom:10px;" id="notes-modal-sub"></div>
+    <textarea id="notes-textarea"></textarea>
+    <div class="modal-btns">
+      <button class="modal-btn-cancel" onclick="closeNotesModal()">Close</button>
+      <button class="modal-btn-save" onclick="saveNotes()">Save</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="import-input" accept=".json" style="display:none;" />
+
+<script>
+let stops = [
+  { id:0,  name:'Memphis, TN',        sub:'Starting Point',   lat:35.1495,  lng:-90.0490,  emoji:'🏠', desc:'Home base. Beale Street, BBQ, Mississippi.', note:'Starting point', interest:10, visited:null, mountain:false, notes:'' },
+  { id:1,  name:'Austin, TX',         sub:'First Stop',       lat:30.2672,  lng:-97.7431,  emoji:'🎸', desc:'Live music capital. 6th Street, Barton Springs.', note:'~7 hrs from Memphis', interest:9, visited:null, mountain:false, notes:'' },
+  { id:2,  name:'East Jesus',         sub:'Slab City, CA',    lat:33.2557,  lng:-115.4957, emoji:'🎨', desc:'Off-grid art colony in Sonoran Desert.', note:'Near Niland, CA', interest:7, visited:null, mountain:false, notes:'' },
+  { id:3,  name:'Sequoia Natl. Park', sub:'California',       lat:36.5785,  lng:-118.7798, emoji:'🌲', desc:'General Sherman — largest tree.', note:'Eastern Sierras', interest:8, visited:null, mountain:true, notes:'' },
+  { id:4,  name:'Grand Canyon',       sub:'South Rim, AZ',    lat:36.0544,  lng:-112.1401, emoji:'🏜️', desc:'277 miles long, a mile deep.', note:'South Rim accessible', interest:10, visited:null, mountain:true, notes:'' },
+  { id:5,  name:'Zion National Park', sub:'Utah',             lat:37.2982,  lng:-113.0263, emoji:'🏔️', desc:'The Narrows, Angels Landing.', note:'Red canyon country', interest:9, visited:null, mountain:true, notes:'' },
+  { id:6,  name:'Monument Valley',    sub:'AZ / UT Border',   lat:36.9983,  lng:-110.0985, emoji:'🗿', desc:'The Mittens and Merrick Butte.', note:'Navajo Tribal Park', interest:9, visited:null, mountain:true, notes:'' },
+  { id:7,  name:'Arches Natl. Park',  sub:'Utah',             lat:38.7331,  lng:-109.5925, emoji:'🌉', desc:'2,000+ natural sandstone arches.', note:'Timed entry', interest:9, visited:null, mountain:true, notes:'' },
+  { id:8,  name:'Moab',               sub:'Utah',             lat:38.5733,  lng:-109.5498, emoji:'🚵', desc:'Gateway for Arches & Canyonlands.', note:'Base camp', interest:8, visited:null, mountain:true, notes:'' },
+  { id:9,  name:'Eisenhower Tunnel',  sub:'I-70, Colorado',   lat:39.6475,  lng:-105.9003, emoji:'🚇', desc:'Highest tunnel at 11,013 ft.', note:'Check weather', interest:7, visited:null, mountain:true, notes:'' },
+  { id:10, name:'Sturgis',            sub:'South Dakota',     lat:44.4089,  lng:-103.5082, emoji:'🏍️', desc:'Black Hills rally town.', note:'August rally 500k+', interest:8, visited:null, mountain:false, notes:'' },
+  { id:11, name:'Wilhelm Reich Museum', sub:'Rangeley, ME',   lat:44.96756, lng:-70.65923, emoji:'🧠', desc:'Psychoanalyst research site.', note:'Summer only', interest:6, visited:null, mountain:false, notes:'' }
+];
+let nextId = 12;
+let editingId = null;
+let currentTab = 'all';
+
+const GYMS_DATA = `255 Robins Rd Hiawatha IA|41.997,-91.678
+1343 Washington Ave San Leandro CA|37.725,-122.156
+1855 Holmes St Livermore CA|37.682,-121.768
+1121 S Magnolia St Woodville TX|30.773,-94.415
+156 Heritage Pkwy Broussard LA|30.133,-91.960
+101 Park West Dr Scott LA|30.233,-92.093
+1128 Grand Caillou Rd Houma LA|29.560,-90.720
+1732 Deroche Cir Gramercy LA|30.049,-90.699
+5200 Veterans Memorial Blvd Metairie LA|29.987,-90.152
+4323 Airline Hwy Baton Rouge LA|30.477,-91.110
+6533 132nd Ave NE Kirkland WA|47.716,-122.185
+2529 Main St Union Gap WA|46.560,-120.478
+14711 Fryelands Blvd SE Monroe WA|47.869,-121.949
+1804 W Francis Ave Spokane WA|47.670,-117.452
+4920 Roswell Rd NE Sandy Springs GA|33.938,-84.363
+6776 Hickory Flat Hwy Canton GA|34.203,-84.488
+3020 Calumet Ave Valparaiso IN|41.470,-87.048
+4112 Franklin St Michigan City IN|41.708,-86.895
+1290 E Ireland Rd South Bend IN|41.714,-86.217
+2934 E Dupont Rd Fort Wayne IN|41.052,-85.091
+514 S 13th St Decatur IN|40.828,-84.929
+210 W Carleton Rd Hillsdale MI|41.920,-84.630
+5801 Columbia Pkwy Rockford IL|42.269,-88.973
+500 Hawk Ridge Dr Hamburg PA|40.555,-75.981
+532 Pottsville Park Plz Pottsville PA|40.684,-76.195
+1800 Daisy St Clearfield PA|41.028,-78.439
+229 N Pottstown Pike Exton PA|40.033,-75.621
+7890 Haven Ave Rancho Cucamonga CA|34.108,-117.591
+3900 N Stockton Hill Rd Kingman AZ|35.224,-114.026
+8490 W Desert Inn Rd Las Vegas NV|36.130,-115.265
+1737 Lake Woodmoor Dr Monument CO|39.094,-104.856
+227 N Main St Tooele UT|40.531,-112.299
+8770 E SR-70 Lakewood Ranch FL|27.403,-82.355
+3828 Sun City Center Blvd Sun City FL|27.718,-82.351
+2522 N McMullen Booth Rd Clearwater FL|28.006,-82.740
+2905 W Kennedy Blvd Tampa FL|27.948,-82.511
+11113 N Dale Mabry Hwy Tampa FL|28.029,-82.511
+1030 S 6th Ave Wauchula FL|27.540,-81.810
+16144 Churchview Dr Lithia FL|27.850,-82.186
+10501 New Haven Rd Harrison OH|39.262,-84.815
+3435 Medlock Bridge Rd Peachtree GA|33.967,-84.220
+270 Rucker Rd Roswell GA|34.038,-84.345
+830 N Shoop Ave Wauseon OH|41.551,-84.143
+26611 N Dixie Hwy Perrysburg OH|41.557,-83.627
+3104 Milan Rd Sandusky OH|41.437,-82.680
+1410 Lafayette Ave Moundsville WV|39.920,-80.743
+390 W State St Hurricane UT|37.175,-113.290
+1827 Troup Hwy Tyler TX|32.351,-95.301
+103 St Paul St Henderson TX|32.153,-94.799
+4033 Lamar Ave Paris TX|33.661,-95.556
+3380 NE Loop 286 Paris TX|33.683,-95.522
+1301 N Hervey St Hope AR|33.673,-93.591
+3800 Monroe Hwy Pineville LA|31.325,-92.434
+1000 Davis Lake Rd Columbia LA|32.101,-92.072
+9960 Business Cir N Naples FL|26.229,-81.791
+2336 Surfside Blvd Cape Coral FL|26.563,-81.980
+2708 Santa Barbara Blvd Cape Coral FL|26.586,-81.968
+4057 Clark Rd Sarasota FL|27.264,-82.487
+3941 Tamiami Trl Punta Gorda FL|26.930,-82.046
+1101 Old Philadelphia Rd Jasper GA|34.468,-84.429
+5513 Edmondson Pike Nashville TN|36.051,-86.725
+645 S Mount Juliet Rd Mt Juliet TN|36.200,-86.519
+787 New Highway 68 Sweetwater TN|35.602,-84.461
+6817 W Brown Deer Rd Milwaukee WI|43.175,-87.994
+2442 Costco Way Bellevue WI|44.466,-88.001
+283 W Centre Ave Portage MI|42.201,-85.580
+1100 Lerdo Hwy Shafter CA|35.501,-119.271
+1100 US-287 Broomfield CO|39.924,-105.087
+420 E 120th Ave Northglenn CO|39.914,-104.980
+6556 Buttercup Dr Wellington CO|40.702,-105.009
+1624 E St Patrick St Rapid City SD|44.079,-103.198
+19437 Evans St NW Elk River MN|45.328,-93.567
+1460 85th Ave N Brooklyn Park MN|45.109,-93.356
+10731 University Ave NE Blaine MN|45.161,-93.231
+2541 County Rd 10 Mounds View MN|45.107,-93.206
+2515 White Bear Ave N Maplewood MN|45.017,-93.011
+120 Heritage Blvd NE Isanti MN|45.492,-93.247
+3684 Highway 150 Floyds Knobs IN|38.324,-85.908
+1107 Market St Charlestown IN|38.452,-85.671
+728 N Main St Springboro OH|39.553,-84.233
+1953 S Alex Rd West Carrollton OH|39.663,-84.252
+16200 SW Pacific Hwy Tigard OR|45.428,-122.770
+26940 SE Stark St Troutdale OR|45.519,-122.409
+1700 W Market St Bolivar TN|35.257,-88.989
+101 N Service Rd Blytheville AR|35.927,-89.919
+591 W Church St Lexington TN|35.651,-88.393
+1416 N Brindlee Mountain Pkwy Arab AL|34.328,-86.496
+11613 Catalpa Ln Woodstock IL|42.314,-88.449
+504 NW Highway 100 Cary IL|42.212,-88.238
+1429 Peterson Rd Libertyville IL|42.283,-87.953
+520 Hartbrook Dr Hartland WI|43.104,-88.346
+6015 W Forest Home Ave Milwaukee WI|42.988,-87.985
+4450 Black Horse Pike Mays Landing NJ|39.452,-74.728
+611 Berlin Cross Keys Rd Sicklerville NJ|39.742,-74.969
+7709 Crittenden St Philadelphia PA|40.074,-75.180
+4030 E Thunderbird Rd Phoenix AZ|33.610,-111.995
+3133 S Lindsay Rd Gilbert AZ|33.329,-111.839
+4720 E Queen Creek Rd Gilbert AZ|33.247,-111.719
+8257 E Guadalupe Rd Mesa AZ|33.362,-111.675
+40601 N Gantzel Rd San Tan Valley AZ|33.180,-111.560
+103 Jasper St Rayville LA|32.479,-91.754
+4924 I-55 N Jackson MS|32.359,-90.117
+207 N Davis Ave Cleveland MS|33.744,-90.724
+2500 S Woodlands Village Blvd Flagstaff AZ|35.169,-111.631
+21819 Marine View Dr S Des Moines WA|47.401,-122.320
+1430 Darlington Ave Crawfordsville IN|40.041,-86.874
+10302 Prosperity Cir Camby IN|39.598,-86.314
+1642 Olive Branch Parke Ln Greenwood IN|39.614,-86.106
+5375 E Thompson Rd Indianapolis IN|39.713,-86.023
+5748 Crawfordsville Rd Speedway IN|39.793,-86.254
+7035 E 96th St Indianapolis IN|39.926,-86.019
+1515 Lincoln Way E Chambersburg PA|39.937,-77.638
+868 N US Rt 15 Dillsburg PA|40.110,-77.036
+2005 Miller Rd East Petersburg PA|40.099,-76.352
+9430 Warner Ave Fountain Valley CA|33.716,-117.953
+20045 Katy Fwy Katy TX|29.786,-95.769
+18535 FM-1488 Magnolia TX|30.209,-95.731
+1100 Clements Brownwood TX|31.709,-98.991
+2283 E Semoran Blvd Apopka FL|28.695,-81.462
+851 S State Road 434 Altamonte Springs FL|28.661,-81.383
+4010 US-1 St Augustine FL|29.902,-81.311`.split('\n').map(line => {
+  const parts = line.split('|');
+  if (parts.length !== 2) return null;
+  const [addr, coords] = parts;
+  const [lat, lng] = coords.split(',').map(parseFloat);
+  return { addr, lat, lng };
+}).filter(Boolean);
+
+let gymsVisible = true;
+let gymMarkers = [];
+let gymMarkersAdded = false;
+let currentLocationMarker = null;
+
+try {
+  const saved = localStorage.getItem('roadTripStops');
+  if (saved) {
+    stops = JSON.parse(saved);
+    nextId = Math.max(...stops.map(s => s.id)) + 1;
+  }
+} catch(e) { console.error('Load error:', e); }
+
+function saveToStorage() {
+  try {
+    localStorage.setItem('roadTripStops', JSON.stringify(stops));
+    document.getElementById('save-status').textContent = '✓ Saved';
+    setTimeout(() => { document.getElementById('save-status').textContent = 'Auto-save'; }, 1500);
+  } catch(e) { console.error('Save error:', e); }
+}
+
+const map = L.map('map', { center:[38.0,-100.0], zoom:5 });
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution:'© OpenStreetMap',
+  maxZoom:19
+}).addTo(map);
+
+let routeLine = null, selectingSlot = null, fromStop = null, toStop = null;
+let ratingTargetId = null, rInterest = 0, rVisited = 0;
+let notesTargetId = null;
+const markers = {};
+
+function interestColor(val) {
+  if (!val) return 'rgba(163,177,138,0.3)';
+  const t = (val - 1) / 9;
+  if (t < 0.5) {
+    const r = 255;
+    const g = Math.round(140 + t * 2 * 100);
+    const b = Math.round(20 + t * 2 * 50);
+    return `rgb(${r},${g},${b})`;
+  } else {
+    const r = Math.round(255 - (t - 0.5) * 2 * 100);
+    const g = Math.round(240 - (t - 0.5) * 2 * 100);
+    const b = Math.round(70 + (t - 0.5) * 2 * 130);
+    return `rgb(${r},${g},${b})`;
+  }
+}
+
+function visitedColor(val) {
+  if (!val) return 'rgba(163,177,138,0.3)';
+  return interestColor(val);
+}
+
+function starsDisplay(val, color) {
+  if (!val) return '<span style="color:#999">—</span>';
+  const filled = '★'.repeat(Math.round(val / 2));
+  const empty  = '☆'.repeat(5 - Math.round(val / 2));
+  return `<span style="color:${color}">${filled}${empty}</span> <span style="color:#999;font-size:.65rem;">${val}/10</span>`;
+}
+
+function updateQuickStats() {
+  const total = stops.length;
+  const visited = stops.filter(s => s.visited).length;
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-visited').textContent = visited;
+}
+
+function buildSidebarItem(stop) {
+  const item = document.createElement('div');
+  item.className = 'stop-item';
+  item.id = `sidebar-item-${stop.id}`;
+  item.dataset.name = stop.name.toLowerCase();
+  const ic = interestColor(stop.interest);
+  const vc = visitedColor(stop.visited);
+  item.innerHTML = `
+    <div class="stop-icon-box" style="background:#f5f5f5;">${stop.emoji}</div>
+    <div class="stop-info">
+      <h3>${stop.name}</h3>
+      <p>${stop.sub}</p>
+      <div class="stop-ratings">
+        <div class="rating-row">
+          <span class="rating-lbl">Want</span>
+          <div class="rating-bar-track" onclick="openRatingModal(${stop.id})" title="Rate">
+            <div class="rating-bar-fill" style="width:${stop.interest ? stop.interest*10 : 0}%;background:${ic};"></div>
+          </div>
+          <span class="rating-val" style="color:${ic};">${stop.interest ?? '–'}</span>
+        </div>
+        <div class="rating-row">
+          <span class="rating-lbl">Visit</span>
+          <div class="rating-bar-track" onclick="openRatingModal(${stop.id})" title="Rate">
+            <div class="rating-bar-fill" style="width:${stop.visited ? stop.visited*10 : 0}%;background:${vc};"></div>
+          </div>
+          <span class="rating-val" style="color:${vc};">${stop.visited ?? '–'}</span>
+        </div>
+      </div>
+    </div>
+    <button class="edit-btn" onclick="event.stopPropagation(); openEditModal(${stop.id});">✏️</button>
+    <button class="notes-btn ${stop.notes ? 'has-notes' : ''}" onclick="event.stopPropagation(); openNotesModal(${stop.id});">📝</button>
+  `;
+  item.addEventListener('click', (e) => {
+    if (e.target.closest('.rating-bar-track') || e.target.closest('.notes-btn') || e.target.closest('.edit-btn')) return;
+    if (selectingSlot) {
+      assignStop(selectingSlot, stop);
+      selectingSlot = null;
+      document.getElementById('instruction-bar').classList.remove('visible');
+    } else {
+      map.setView([stop.lat, stop.lng], 10);
+      markers[stop.id].openPopup();
+      document.querySelectorAll('.stop-item').forEach(el => el.classList.remove('active'));
+      item.classList.add('active');
+    }
+  });
+  return item;
+}
+
+function refreshSidebarItem(stop) {
+  const old = document.getElementById(`sidebar-item-${stop.id}`);
+  if (old) old.replaceWith(buildSidebarItem(stop));
+}
+
+function makeIcon(stop) {
+  const ic = interestColor(stop.interest);
+  return L.divIcon({
+    className:'',
+    html:`<div class="map-pin">
+            <div class="pin-bubble" style="background:#f5f5f5;">
+              ${stop.emoji}
+              <div class="pin-ring" style="border-color:${ic};"></div>
+            </div>
+            <div class="pin-tail" style="background:${ic};"></div>
+          </div>`,
+    iconSize:[38,48], iconAnchor:[19,48], popupAnchor:[0,-50]
+  });
+}
+
+function buildPopup(stop) {
+  const ic = interestColor(stop.interest);
+  const vc = visitedColor(stop.visited);
+  return `
+    <div class="pu-head" style="background:var(--fern);">
+      <span class="pu-emoji">${stop.emoji}</span>
+      <div><div>${stop.name}</div><div class="pu-sub">${stop.sub}</div></div>
+    </div>
+    <div class="pu-body">
+      ${stop.desc}
+      <div class="note">${stop.note}</div>
+      <div class="pu-ratings">
+        <div class="pu-rating-row">Want: ${starsDisplay(stop.interest, ic)}</div>
+        <div class="pu-rating-row">Visit: ${starsDisplay(stop.visited, vc)}</div>
+      </div>
+      <button class="pu-rate-btn" onclick="openRatingModal(${stop.id}); map.closePopup();">✏️ Rate</button>
+    </div>
+  `;
+}
+
+function addMarkerToMap(stop) {
+  const marker = L.marker([stop.lat, stop.lng], { icon: makeIcon(stop) }).addTo(map);
+  marker.bindPopup(buildPopup(stop));
+  marker.on('click', () => {
+    if (selectingSlot) {
+      assignStop(selectingSlot, stop);
+      selectingSlot = null;
+      document.getElementById('instruction-bar').classList.remove('visible');
+    }
+  });
+  markers[stop.id] = marker;
+}
+
+function refreshMarker(stop) {
+  if (markers[stop.id]) {
+    markers[stop.id].setIcon(makeIcon(stop));
+    markers[stop.id].setPopupContent(buildPopup(stop));
+  }
+}
+
+function renderStops() {
+  document.getElementById('stop-list').innerHTML = '';
+  let filtered = stops;
+  
+  if (currentTab === 'visited') {
+    filtered = stops.filter(s => s.visited);
+    Object.values(markers).forEach(m => map.removeLayer(m));
+    filtered.forEach(s => map.addLayer(markers[s.id]));
+  } else if (currentTab === 'unvisited') {
+    filtered = stops.filter(s => !s.visited);
+    Object.values(markers).forEach(m => map.removeLayer(m));
+    filtered.forEach(s => map.addLayer(markers[s.id]));
+  } else {
+    Object.values(markers).forEach(m => map.addLayer(m));
+  }
+  
+  const sort = document.getElementById('sort-select').value;
+  if (sort === 'alpha') filtered.sort((a,b) => a.name.localeCompare(b.name));
+  else if (sort === 'interest-high') filtered.sort((a,b) => (b.interest||0) - (a.interest||0));
+  else if (sort === 'interest-low') filtered.sort((a,b) => (a.interest||0) - (b.interest||0));
+  else if (sort === 'visited-high') filtered.sort((a,b) => (b.visited||0) - (a.visited||0));
+  else if (sort === 'visited-low') filtered.sort((a,b) => (a.visited||0) - (b.visited||0));
+  
+  filtered.forEach(stop => {
+    document.getElementById('stop-list').appendChild(buildSidebarItem(stop));
+  });
+  updateQuickStats();
+}
+
+function renderAll() {
+  stops.forEach(stop => addMarkerToMap(stop));
+  renderStops();
+}
+
+// Gyms
+function addGyms() {
+  if (gymMarkersAdded) return;
+  gymMarkersAdded = true;
+  GYMS_DATA.forEach(gym => {
+    const icon = L.divIcon({
+      className: '',
+      html: '<div class="gym-marker">🏋️</div>',
+      iconSize: [14, 14],
+      iconAnchor: [7, 7]
+    });
+    const marker = L.marker([gym.lat, gym.lng], { icon });
+    marker.bindPopup(`<div style="padding:6px;font-size:.75rem;"><strong>Anytime Fitness</strong><br>${gym.addr}</div>`);
+    gymMarkers.push(marker);
+  });
+  updateGymVisibility();
+}
+
+function updateGymVisibility() {
+  const zoom = map.getZoom();
+  if (gymsVisible && zoom >= 8) {
+    gymMarkers.forEach(m => { if (!map.hasLayer(m)) map.addLayer(m); });
+  } else {
+    gymMarkers.forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); });
+  }
+}
+
+function toggleGyms() {
+  gymsVisible = !gymsVisible;
+  document.getElementById('gym-toggle').classList.toggle('active', gymsVisible);
+  updateGymVisibility();
+}
+
+map.on('zoomend', updateGymVisibility);
+
+function getMyLocation() {
+  if (!navigator.geolocation) {
+    alert('Geolocation not supported.');
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(pos => {
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+    if (currentLocationMarker) map.removeLayer(currentLocationMarker);
+    const icon = L.divIcon({
+      className: '',
+      html: '<div class="location-pin"></div>',
+      iconSize: [20, 20],
+      iconAnchor: [10, 10]
+    });
+    currentLocationMarker = L.marker([lat, lng], { icon }).addTo(map);
+    currentLocationMarker.bindPopup('<div style="padding:6px;font-size:.75rem;"><strong>📍 You are here</strong></div>').openPopup();
+    map.setView([lat, lng], 12);
+  }, err => {
+    alert('Unable to get location: ' + err.message);
+  });
+}
+
+renderAll();
+addGyms();
+map.fitBounds(L.latLngBounds(stops.map(s=>[s.lat,s.lng])), { padding:[40,40] });
+
+document.getElementById('search-input').addEventListener('input', e => {
+  const query = e.target.value.toLowerCase();
+  document.querySelectorAll('.stop-item').forEach(item => {
+    const name = item.dataset.name;
+    item.classList.toggle('hidden', !name.includes(query));
+  });
+});
+
+document.getElementById('sort-select').addEventListener('change', renderStops);
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    currentTab = tab.dataset.tab;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    renderStops();
+  });
+});
+
+function openRatingModal(id) {
+  const stop = stops.find(s => s.id === id);
+  if (!stop) return;
+  ratingTargetId = id;
+  rInterest = stop.interest || 0;
+  rVisited  = stop.visited  || 0;
+  document.getElementById('rating-modal-title').textContent = stop.emoji + ' ' + stop.name;
+  document.getElementById('rating-modal-sub').textContent   = stop.sub;
+  renderStarRow('stars-interest', rInterest, (v) => { rInterest = v; });
+  renderStarRow('stars-visited',  rVisited,  (v) => { rVisited  = v; });
+  document.getElementById('rating-modal').classList.add('open');
+}
+
+function renderStarRow(containerId, currentVal, onSet) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  for (let i = 1; i <= 10; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'star-btn' + (i <= currentVal ? ' on' : '');
+    btn.textContent = '★';
+    btn.onclick = () => { onSet(i); renderStarRow(containerId, i, onSet); };
+    container.appendChild(btn);
+  }
+}
+
+function saveRating() {
+  const stop = stops.find(s => s.id === ratingTargetId);
+  if (!stop) return;
+  stop.interest = rInterest || null;
+  stop.visited  = rVisited  || null;
+  refreshSidebarItem(stop);
+  refreshMarker(stop);
+  updateQuickStats();
+  document.getElementById('rating-modal').classList.remove('open');
+  saveToStorage();
+  renderStops();
+}
+
+document.getElementById('rating-modal').addEventListener('click', function(e) {
+  if (e.target === this) this.classList.remove('open');
+});
+
+function openNotesModal(id) {
+  const stop = stops.find(s => s.id === id);
+  if (!stop) return;
+  notesTargetId = id;
+  document.getElementById('notes-modal-title').textContent = '📝 ' + stop.name;
+  document.getElementById('notes-modal-sub').textContent   = stop.sub;
+  document.getElementById('notes-textarea').value = stop.notes || '';
+  document.getElementById('notes-modal').classList.add('open');
+}
+
+function closeNotesModal() {
+  document.getElementById('notes-modal').classList.remove('open');
+}
+
+function saveNotes() {
+  const stop = stops.find(s => s.id === notesTargetId);
+  if (!stop) return;
+  stop.notes = document.getElementById('notes-textarea').value;
+  refreshSidebarItem(stop);
+  closeNotesModal();
+  saveToStorage();
+}
+
+document.getElementById('notes-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeNotesModal();
+});
+
+const EMOJIS = ['🏖️','🏕️','🌋','🗻','🏝️','🌊','🦅','🦌','🌵','🏜️','🌲','🌉','🏛️','⛪','🏰','🎡','🎸','🎨','🚵','🏍️','🚗','✈️','🚂','⛽','🍖','🍺','☕','🛖','🏠','📍','🗺️','⭐','🔥','💎','🌅','🌄','🧠','🎭','🏺','🗿'];
+let selectedEmoji = '📍';
+
+function openAddModal() {
+  editingId = null;
+  selectedEmoji = '📍';
+  document.getElementById('modal-title').textContent = '📍 Add Location';
+  document.getElementById('modal-delete-btn').style.display = 'none';
+  ['m-gmaps','m-name','m-sub','m-lat','m-lng','m-desc','m-interest'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('modal-ai-status').textContent = '';
+  buildEmojiGrid();
+  document.getElementById('add-modal').classList.add('open');
+}
+
+function openEditModal(id) {
+  const stop = stops.find(s => s.id === id);
+  if (!stop) return;
+  editingId = id;
+  selectedEmoji = stop.emoji;
+  document.getElementById('modal-title').textContent = '✏️ Edit Location';
+  document.getElementById('modal-delete-btn').style.display = 'inline-block';
+  document.getElementById('m-gmaps').value = '';
+  document.getElementById('m-name').value = stop.name;
+  document.getElementById('m-sub').value = stop.sub;
+  document.getElementById('m-lat').value = stop.lat;
+  document.getElementById('m-lng').value = stop.lng;
+  document.getElementById('m-desc').value = stop.desc;
+  document.getElementById('m-interest').value = stop.interest || '';
+  document.getElementById('modal-ai-status').textContent = '';
+  buildEmojiGrid();
+  document.getElementById('add-modal').classList.add('open');
+}
+
+function buildEmojiGrid() {
+  const grid = document.getElementById('emoji-grid');
+  grid.innerHTML = '';
+  EMOJIS.forEach(em => {
+    const el = document.createElement('div');
+    el.className = 'emoji-opt' + (em === selectedEmoji ? ' selected' : '');
+    el.textContent = em;
+    el.onclick = () => {
+      selectedEmoji = em;
+      document.querySelectorAll('.emoji-opt').forEach(e => e.classList.remove('selected'));
+      el.classList.add('selected');
+    };
+    grid.appendChild(el);
+  });
+}
+
+function closeAddModal() { document.getElementById('add-modal').classList.remove('open'); }
+
+document.getElementById('add-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeAddModal();
+});
+
+document.getElementById('m-gmaps').addEventListener('input', function(e) {
+  const url = e.target.value;
+  const match = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (match) {
+    document.getElementById('m-lat').value = parseFloat(match[1]);
+    document.getElementById('m-lng').value = parseFloat(match[2]);
+    document.getElementById('modal-ai-status').textContent = '✓ Coordinates extracted';
+  }
+});
+
+async function generateDescription(name, sub) {
+  const statusEl = document.getElementById('modal-ai-status');
+  statusEl.textContent = '✨ Generating...';
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5-20250929',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: `Write 1-2 sentences about "${name}" in ${sub} for road trip. JSON: {"desc":"...","note":"tip","emoji":"🏕️"}`
+        }]
+      })
+    });
+    const data = await response.json();
+    const text = data.content[0].text.trim();
+    const parsed = JSON.parse(text);
+    document.getElementById('m-desc').value = parsed.desc;
+    if (parsed.emoji && EMOJIS.includes(parsed.emoji)) {
+      selectedEmoji = parsed.emoji;
+      buildEmojiGrid();
+    }
+    statusEl.textContent = '✅ Done!';
+    return parsed;
+  } catch(e) {
+    statusEl.textContent = 'AI unavailable';
+    return null;
+  }
+}
+
+async function saveLocation() {
+  const name = document.getElementById('m-name').value.trim();
+  const sub  = document.getElementById('m-sub').value.trim();
+  const lat  = parseFloat(document.getElementById('m-lat').value);
+  const lng  = parseFloat(document.getElementById('m-lng').value);
+  const interest = parseInt(document.getElementById('m-interest').value) || null;
+  let desc   = document.getElementById('m-desc').value.trim();
+  
+  if (!name || isNaN(lat) || isNaN(lng)) {
+    alert('Name, lat, lng required.');
+    return;
+  }
+  
+  if (!desc) {
+    const ai = await generateDescription(name, sub || 'USA');
+    if (ai) desc = ai.desc;
+    else desc = `${name} — worth exploring.`;
+  }
+  
+  if (editingId !== null) {
+    const stop = stops.find(s => s.id === editingId);
+    if (stop) {
+      stop.name = name;
+      stop.sub = sub || 'USA';
+      stop.lat = lat;
+      stop.lng = lng;
+      stop.emoji = selectedEmoji;
+      stop.desc = desc;
+      stop.interest = interest;
+      markers[stop.id].setLatLng([lat, lng]);
+      refreshMarker(stop);
+      refreshSidebarItem(stop);
+    }
+  } else {
+    const newStop = {
+      id: nextId++, name, sub: sub || 'USA', lat, lng,
+      emoji: selectedEmoji, desc, note: '', interest, visited: null, mountain: false, notes: ''
+    };
+    stops.push(newStop);
+    addMarkerToMap(newStop);
+    document.getElementById('stop-list').appendChild(buildSidebarItem(newStop));
+    map.setView([lat, lng], 10);
+    markers[newStop.id].openPopup();
+  }
+  
+  updateQuickStats();
+  closeAddModal();
+  saveToStorage();
+  renderStops();
+}
+
+function deleteLocation() {
+  if (!editingId || !confirm('Delete this location?')) return;
+  stops = stops.filter(s => s.id !== editingId);
+  if (markers[editingId]) {
+    map.removeLayer(markers[editingId]);
+    delete markers[editingId];
+  }
+  closeAddModal();
+  saveToStorage();
+  renderStops();
+}
+
+function exportData() {
+  const data = { stops };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'roadtrip-data.json';
+  a.click();
+}
+
+function importData() {
+  document.getElementById('import-input').click();
+}
+
+document.getElementById('import-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      stops = data.stops || [];
+      nextId = Math.max(...stops.map(s => s.id)) + 1;
+      Object.keys(markers).forEach(id => map.removeLayer(markers[id]));
+      renderAll();
+      saveToStorage();
+      alert('Import successful!');
+    } catch(err) {
+      alert('Import failed: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+});
+
+function haversine(lat1,lng1,lat2,lng2) {
+  const R=3958.8, dLat=(lat2-lat1)*Math.PI/180, dLng=(lng2-lng1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function formatTime(hours) {
+  const h=Math.floor(hours), m=Math.round((hours-h)*60);
+  if(h===0) return `${m} min`;
+  if(m===0) return `${h} hr`;
+  return `${h} hr ${m} min`;
+}
+function assignStop(slot, stop) {
+  if (slot==='from') { fromStop=stop; const el=document.getElementById('slot-from'); el.textContent=stop.emoji+' '+stop.name; el.classList.remove('selecting'); el.classList.add('filled'); }
+  else               { toStop=stop;   const el=document.getElementById('slot-to');   el.textContent=stop.emoji+' '+stop.name; el.classList.remove('selecting'); el.classList.add('filled'); }
+  updateCalcBtn(); updateSidebarHighlights();
+}
+function startSelect(slot) {
+  selectingSlot=slot;
+  const el=document.getElementById('slot-'+slot);
+  el.classList.add('selecting'); el.textContent='👆 Click...';
+  document.getElementById('instruction-bar').classList.add('visible');
+  updateSidebarHighlights();
+}
+function updateCalcBtn() { document.getElementById('calc-btn').disabled=!(fromStop&&toStop); }
+function updateSidebarHighlights() {
+  stops.forEach(s => {
+    const el=document.getElementById(`sidebar-item-${s.id}`);
+    if (!el) return;
+    el.classList.remove('selecting-from','selecting-to');
+    if (fromStop&&s.id===fromStop.id) el.classList.add('selecting-from');
+    if (toStop  &&s.id===toStop.id)   el.classList.add('selecting-to');
+  });
+}
+function swapStops() {
+  [fromStop,toStop]=[toStop,fromStop];
+  ['from','to'].forEach((slot,i)=>{
+    const st=[fromStop,toStop][i];
+    const el=document.getElementById('slot-'+slot);
+    el.textContent=st?st.emoji+' '+st.name:'— tap —';
+    el.classList.toggle('filled',!!st);
+  });
+  updateCalcBtn(); updateSidebarHighlights();
+}
+async function drawRouteLine() {
+  if (routeLine) map.removeLayer(routeLine);
+  const url=`https://router.project-osrm.org/route/v1/driving/${fromStop.lng},${fromStop.lat};${toStop.lng},${toStop.lat}?overview=full&geometries=geojson`;
+  try {
+    const res=await fetch(url), data=await res.json();
+    const coords=data.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]);
+    routeLine=L.polyline(coords,{color:'var(--dry-sage)',weight:5,opacity:.85}).addTo(map);
+    map.fitBounds(routeLine.getBounds(),{padding:[80,80]});
+    return { meters:data.routes[0].distance, seconds:data.routes[0].duration };
+  } catch(e) {
+    routeLine=L.polyline([[fromStop.lat,fromStop.lng],[toStop.lat,toStop.lng]],{color:'var(--dry-sage)',weight:3,opacity:.75,dashArray:'8,6'}).addTo(map);
+    map.fitBounds(routeLine.getBounds(),{padding:[80,80]});
+    return null;
+  }
+}
+async function calcRoute() {
+  if (!fromStop||!toStop) return;
+  const btn=document.getElementById('calc-btn');
+  btn.disabled=true; btn.textContent='...';
+  const osrm=await drawRouteLine();
+  let roadMiles, hours;
+  if (osrm) {
+    roadMiles=Math.round(osrm.meters/1609.34);
+    hours=osrm.seconds/3600;
+  } else {
+    const asMiles=haversine(fromStop.lat,fromStop.lng,toStop.lat,toStop.lng);
+    const factor=asMiles<300?1.15:asMiles<800?1.18:1.14;
+    roadMiles=Math.round(asMiles*factor); hours=roadMiles/67;
+  }
+  const involvesMountains = (fromStop.mountain||false)||(toStop.mountain||false);
+  const correction = involvesMountains ? 0.88 : 0.92;
+  const correctedHours = hours * correction;
+  document.getElementById('res-dist').textContent=roadMiles.toLocaleString()+' mi';
+  document.getElementById('res-time').textContent=formatTime(correctedHours);
+  let note=osrm?'Via real roads · adjusted.':'Estimated.';
+  if (roadMiles>800) note+=' 2+ days.';
+  document.getElementById('res-note').textContent=note;
+  document.getElementById('route-result').classList.add('visible');
+  btn.disabled=false; btn.textContent='Calculate';
+}
+</script>
+</body>
+</html>
